@@ -30,6 +30,8 @@ import tempfile
 import time
 import signal
 import pathlib
+import platform
+import configparser
 
 try:
     # Python 2
@@ -104,6 +106,35 @@ from .iconview import CellRendererImage
 GObject.type_register(CellRendererImage)
 
 
+def _config_file():
+    home = os.path.expanduser("~")
+    if platform.system() == 'Darwin':
+        p = os.path.join(home, 'Library', 'Caches')
+    elif 'LOCALAPPDATA' in os.environ:
+        p = os.getenv('LOCALAPPDATA')
+    elif 'XDG_CACHE_HOME' in os.environ:
+        p = os.getenv('XDG_CACHE_HOME')
+    else:
+        p = os.path.join(home, '.cache')
+    p = os.path.join(p, DOMAIN)
+    os.makedirs(p, exist_ok=True)
+    return os.path.join(p, 'config.ini')
+
+
+def _init_config():
+    r = configparser.ConfigParser()
+    r.read(_config_file())
+    c = r['DEFAULT']
+    ds = Gdk.Screen.get_default()
+    if 'window-width' not in c:
+        c['window-width'] = str(min(700, ds.get_width() / 2))
+    if 'window-height' not in c:
+        c['window-height'] = str(min(600, ds.get_height() - 50))
+    if 'zoom-level' not in c:
+        c['zoom-level'] = str(0)
+    return r
+
+
 class PdfArranger:
     prefs = {
         'window width': min(700, Gdk.Screen.get_default().get_width() / 2),
@@ -142,6 +173,7 @@ class PdfArranger:
         if not os.path.exists(ui_path):
             ui_path = '/usr/local/share/{}/{}.ui'.format(DOMAIN, DOMAIN)
 
+        self.config = _init_config()
         self.uiXML = Gtk.Builder()
         self.uiXML.set_translation_domain(DOMAIN)
         self.uiXML.add_from_file(ui_path)
@@ -449,7 +481,8 @@ class PdfArranger:
 
         # Release Poppler.Document instances to unlock all temporay files
         self.pdfqueue = []
-
+        with open(_config_file(), 'w') as f:
+            self.config.write(f)
         if os.path.isdir(self.tmp_dir):
             shutil.rmtree(self.tmp_dir)
         if Gtk.main_level():
