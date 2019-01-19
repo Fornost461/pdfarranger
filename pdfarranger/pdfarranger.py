@@ -123,26 +123,21 @@ def _config_file():
 
 def _init_config():
     r = configparser.ConfigParser()
+    r.add_section('window')
     r.read(_config_file())
-    c = r['DEFAULT']
     ds = Gdk.Screen.get_default()
-    if 'window-width' not in c:
-        c['window-width'] = str(min(700, ds.get_width() / 2))
-    if 'window-height' not in c:
-        c['window-height'] = str(min(600, ds.get_height() - 50))
-    if 'zoom-level' not in c:
-        c['zoom-level'] = str(0)
+    r.getint('window', 'width', int(min(700, ds.get_width() / 2)))
+    r.getint('window', 'height', int(min(600, ds.get_height() - 50)))
+    r.getboolean('window', 'maximized', False)
+    r.getint('DEFAULT', 'zoom-level', 0)
+    r.set('window', 'width', )
+    r.set('window', 'height', )
+    r.set('window', 'maximized', )
     return r
 
 
 class PdfArranger:
-    prefs = {
-        'window width': min(700, Gdk.Screen.get_default().get_width() / 2),
-        'window height': min(600, Gdk.Screen.get_default().get_height() - 50),
-        'initial thumbnail size': 300,
-        'initial zoom level': 0,
-    }
-
+    INITIAL_THUMBNAIL_SIZE = 300
     MODEL_ROW_INTERN = 1001
     MODEL_ROW_EXTERN = 1002
     TEXT_URI_LIST = 1003
@@ -184,8 +179,10 @@ class PdfArranger:
         self.window = self.uiXML.get_object('main_window')
         self.window.set_title(APPNAME)
         self.window.set_border_width(0)
-        self.window.set_default_size(self.prefs['window width'],
-                                     self.prefs['window height'])
+        wc = self.config['window']
+        if bool(wc['maximized']):
+            self.window.maximize()
+        self.window.set_default_size(int(wc['width']), int(wc['height']))
         self.window.connect('delete_event', self.close_application)
 
         if hasattr(GLib, "unix_signal_add"):
@@ -221,8 +218,8 @@ class PdfArranger:
                                    float,       # 12.Page height
                                    float)       # 13.Resampling factor
 
-        self.zoom_set(self.prefs['initial zoom level'])
-        self.iv_col_width = self.prefs['initial thumbnail size']
+        self.zoom_set(int(self.config['DEFAULT']['zoom-level']))
+        self.iv_col_width = self.INITIAL_THUMBNAIL_SIZE
 
         self.iconview = Gtk.IconView(self.model)
         self.iconview.clear()
@@ -481,6 +478,12 @@ class PdfArranger:
 
         # Release Poppler.Document instances to unlock all temporay files
         self.pdfqueue = []
+        wc = self.config['window']
+        wsize = self.window.get_size()
+        r['width'] = str(wsize[0])
+        r['height'] = str(wsize[1])
+        r['maximized'] = str(self.window.is_maximized())
+        self.config['DEFAULT']['zoom-level'] = str(self.zoom_level)
         with open(_config_file(), 'w') as f:
             self.config.write(f)
         if os.path.isdir(self.tmp_dir):
